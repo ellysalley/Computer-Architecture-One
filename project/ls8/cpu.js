@@ -2,14 +2,33 @@
  * LS-8 v2.0 emulator skeleton code
  */
 
-const HLT = 0b00000001;
-const LDI = 0b10011001;
-const PRN = 0b01000011;
-const MUL = 0b10101010;
-const PUSH = 0b01001101;
-const POP = 0b01001100;
+const ADD  = 0b00001100; 
+const CALL = 0b00001111; 
+const CMP  = 0b00010110; 
+const DEC  = 0b00011000; 
+const DIV  = 0b00001110;
+const HLT  = 0b00011011; 
+const INC  = 0b00010111;
+const INT  = 0b00011001; 
+const IRET = 0b00011010; 
+const JEQ  = 0b00010011; 
+const JMP  = 0b00010001; 
+const JNE  = 0b00010100; 
+const LD   = 0b00010010; 
+const LDI  = 0b00000100; 
+const MUL  = 0b00000101; 
+const NOP  = 0b00000000; 
+const POP  = 0b00001011; 
+const PRA  = 0b00000111; 
+const PRN  = 0b00000110; 
+const PUSH = 0b00001010;
+const RET  = 0b00010000;
+const ST   = 0b00001001; 
+const SUB  = 0b00001101; 
 
-const SP = 7;
+const IM = 0x05; 
+const IS = 0x06; 
+const SP = 0x07; 
 
 /**
  * Class for simulating a simple Computer (CPU & memory)
@@ -68,9 +87,20 @@ class CPU {
             case 'MUL':
                 this.reg[regA] = this.reg[regA] * this.reg[regB];
                 break;
-        }
+            case 'ADD':
+                this.reg[regA] = this.reg[regA] + this.reg[regB];
+                break;
+            case 'INC':
+                this.reg[regA]++;
+                break;
+            case 'DEC':
+                this.reg[regA]--;
+                break;
+            default:
+                console.log('default');
+            }
     }
-
+        
     /**
      * Advances the CPU one cycle
      */
@@ -133,48 +163,140 @@ class CPU {
                 break;
         }
         */
-        const handleHLT = () => {
-            this.stopClock();
-        };
-
-        const handleLDI = (operandA, operandB) => {
-            this.reg[operandA] = operandB;
-        };
-
-        const handlePRN = (operandA) => {
-            console.log(this.reg[operandA]);
-        };
-
-        const handleMUL = (operandA, operandB) => {
-            this.reg[operandA] = this.alu('MUL', operandA, operandB);
-        };
-
-        const handlePush = () => {
-            this.reg[SP]--;
-            this.ram.write(this.reg[SP], this.reg[operandA]);
-        };
-
-        const handlePop = () => {
-            this.reg[operandA] = this.ram.read(this.reg[SP]);
-            this.reg[SP]++;
-        };
-
-        const handleDefault = (instruction) => {
-            console.log("Unknown instruction: " + IR.toString(2));
-            handleHLT();
-        };
 
         const branchTable = {
-            [LDI]: handleLDI,
-            [PRN]: handlePRN, 
-            [MUL]: handleMUL,
-            [HLT]: handleHLT,
+            [ADD]  : ADD,
+            [CALL] : CALL,
+            [CMP]  : CMP, 
+            [DEC]  : DEC, 
+            [DIV]  : DIV, 
+            [HLT]  : HLT, 
+            [INC]  : INC, 
+            [INT]  : INT, 
+            [IRET] : IRET,  
+            [JEQ]  : JEQ, 
+            [JMP]  : JMP,
+            [JNE]  : JNE,
+            [LD]   : LD, 
+            [LDI]  : LDI, 
+            [MUL]  : MUL, 
+            [NOP]  : NOP,  
+            [POP]  : POP, 
+            [PRA]  : PRA, 
+            [PRN]  : PRN,
+            [PUSH] : PUSH, 
+            [RET]  : RET, 
+            [ST]   : ST, 
+            [SUB]  : SUB
         };
 
         if (Object.keys(branchTable).includes(IR.toString())) {
             branchTable[IR](operandA, operandB);
         } else {
             handleDefault(IR);
+        };
+
+        const ADD = (operandA, operandB) => {
+            this.alu('ADD', oprandA, operandB);
+        };
+        const CALL = () => {
+            this._push(operandB);
+            this.reg.PC = this.reg[operandA]
+        };
+        const CMP = () => {
+            this.alu('CMP', operandA, operandB);
+        };
+        const DEC = () => {
+            this.alu('DEC', operandA);
+            this.alu('ADD', 'PC', null, 2);
+        };
+        const DIV = () => {
+            this.alu('DIV', operandA, operandB);
+            this.alu('ADD', 'PC', null, 3);
+        };
+        const HLT = () => {
+            this.stopClock();
+        };
+        const INC = () => {
+            this.alu('INC', operandA);
+        };
+        const INT = () => {
+            const intNum = this.reg[operandA];
+            this.reg[IM] |= intNum;
+        };
+        const IRET = () => {
+            for (let r=7; r >= 0; r--) {
+                this.reg[r] = this._pop();
+            }
+            this.reg.PC = this._pop();
+            this.flags.interruptsEnabled = true;
+        };
+        const JEQ = () => {
+            if (this.flags.equal) {
+                this.reg.PC = this.reg[operandA];
+            } else {
+                this.alu('ADD', 'PC', null, 2);
+            }
+        };
+    
+        const JMP = () => {
+            this.reg.PC = this.reg[operandA];
+        };
+        const JNE = () => {
+            if (!this.flags.equal) {
+                this.reg.PC = this.reg[operandA];
+            } else {
+                this.alu('ADD', 'PC', null, 2);
+            }
+        };
+        const LD = () => {
+            this.reg[operandA] = this.ram.read(this.reg[operandB]);
+            this.alu('ADD', 'PC', null, 3);
+        };
+        const MUL = (operandA, operandB) => {
+            this.reg[operandA] = this.alu('MUL', operandA, operandB);
+        };
+        const LDI = (operandA, operandB) => {
+            this.reg[operandA] = operandB;
+        };
+        const NOP = () => {
+            this.alu('INC', 'PC');
+        };
+        const _pop = () => {
+            const val = this.ram.read(this.reg[SP]);
+            this.alu('INC', SP);
+            return val;
+        };
+        const POP = () => {
+            this.reg[operandA] = this.ram.read(this.reg[SP]);
+            this.reg[SP]++;
+        };
+        const PRA = () => {
+            const reg = this.ram.read(this.reg.PC + 1);
+            fs.writeSync(process.stdout.fd, String.fromCharCode(this.reg[reg]));
+            this.alu('ADD', 'PC', null, 2);
+        };
+        const PRN = (operandA) => {
+            console.log(this.reg[operandA]);
+        };
+        const PUSH = () => {
+            this.reg[SP]--;
+            this.ram.write(this.reg[SP], this.reg[operandA]);
+        };
+        const _push = (val) => {
+            this.alu('DEC', SP);
+            this.ram.write(this.reg[SP], val);
+        };
+        const RET = () => {
+            this.reg.PC = this._pop();
+        };
+        const STR = () => {
+            this.ram.write(this.reg[operandA], this.reg[operandB]);
+            this.alu('ADD', 'PC', null, 3);
+        };
+        const SUB = () => {
+            this.alu('SUB', operandA, operandB);
+            this.alu('ADD', 'PC', null, 3);
         };
 
         // Increment the PC register to go to the next instruction. Instructions
@@ -184,8 +306,8 @@ class CPU {
         
         if (IR !== CALL && IR !== RET) {
             this.reg.PC += (IR >>> 6) + 1;
-        }
-    }
-}
+        };
+    };
+};
 
 module.exports = CPU;
