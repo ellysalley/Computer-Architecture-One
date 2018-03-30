@@ -9,6 +9,8 @@ const MUL = 0b10101010;
 const PUSH = 0b01001101;
 const POP = 0b01001100;
 
+const SP = 7;
+
 /**
  * Class for simulating a simple Computer (CPU & memory)
  */
@@ -109,6 +111,22 @@ class CPU {
                 this.alu('MUL', operandA, operandB);
                 break;
 
+            case PUSH:
+                this.reg[SP]--;
+                this.ram.write(this.reg[SP], this.reg[operandA]);
+                break;
+
+            case POP:
+                this.reg[operandA] = this.ram.read(this.reg[SP]);
+                this.reg[SP]++;
+                break;
+
+            case CALL:
+                this.reg[SP]--;
+                this.ram.write(this.reg[SP], this.reg.PC + 2);
+                this.reg.PC = this.reg[operandA];
+                break;
+
             default:
                 console.log("Unknown instruction: " + IR.toString(2));
                 this.stopClock();
@@ -132,13 +150,13 @@ class CPU {
         };
 
         const handlePush = () => {
-            this.reg[7] -= 1;
-            this.ram.write(this.reg[7], this.reg[operandA]);
+            this.reg[SP]--;
+            this.ram.write(this.reg[SP], this.reg[operandA]);
         };
 
         const handlePop = () => {
-            this.reg[operandA] = this.ram.read(this.reg[7]);
-            this.reg[7] += 1;
+            this.reg[operandA] = this.ram.read(this.reg[SP]);
+            this.reg[SP]++;
         };
 
         const handleDefault = (instruction) => {
@@ -164,7 +182,9 @@ class CPU {
         // instruction byte tells you how many bytes follow the instruction byte
         // for any particular instruction.
         
-        this.reg.PC += (IR >>> 6) + 1;
+        if (IR !== CALL && IR !== RET) {
+            this.reg.PC += (IR >>> 6) + 1;
+        }
     }
 }
 
