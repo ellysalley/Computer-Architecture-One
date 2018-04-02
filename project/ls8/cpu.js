@@ -30,6 +30,10 @@ const IM = 0x05;
 const IS = 0x06; 
 const SP = 0x07; 
 
+const E_FLAG = 0;
+const G_FLAG = 1;
+const L_FLAG = 2;
+
 /**
  * Class for simulating a simple Computer (CPU & memory)
  */
@@ -45,6 +49,9 @@ class CPU {
         
         // Special-purpose registers
         this.reg.PC = 0; // Program Counter
+        this.reg.FL = 0; // Flags
+
+        this.reg[SP] = 0xF4; // empty stack
     }
 	
     /**
@@ -72,6 +79,18 @@ class CPU {
         clearInterval(this.clock);
     }
 
+    setFlag(flag, val) {
+        if (val) {
+            this.reg.FL |= 1 << flag;
+        } else {
+            this.reg.FL &= ~(1 << flag);
+        }
+    }
+
+    getFlag(flag) {
+        return (this.reg.FL & (1 << flag)) >> flag;
+    }
+
     /**
      * ALU functionality
      *
@@ -96,6 +115,11 @@ class CPU {
             case 'DEC':
                 this.reg[regA]--;
                 break;
+            case 'CMP':
+                this.setFlag(E_FLAG, this.reg[regA] === this.reg[regB]);
+                this.setFlag(L_FLAG, this.reg[regA] < this.reg[regB]);
+                this.setFlag(G_FLAG, this.reg[regA] > this.reg[regB]);
+            break;
             default:
                 console.log('default');
             }
@@ -164,6 +188,107 @@ class CPU {
         }
         */
 
+        const ADD = (operandA, operandB) => {
+            this.alu('ADD', oprandA, operandB);
+        };
+        const CALL = () => {
+            this._push(operandB);
+            this.reg.PC = this.reg[operandA]
+        };
+        const CMP = () => {
+            this.alu('CMP', operandA, operandB);
+        };
+        const DEC = () => {
+            this.alu('DEC', operandA);
+        };
+        const DIV = () => {
+            this.alu('DIV', operandA, operandB);
+        };
+        const HLT = () => {
+            this.stopClock();
+        };
+        const INC = () => {
+            this.alu('INC', operandA);
+        };
+        const INT = () => {
+            const intNum = this.reg[operandA];
+            this.reg[IM] |= intNum;
+        };
+        const IRET = () => {
+            for (let r=7; r >= 0; r--) {
+                this.reg[r] = this._pop();
+            }
+            this.reg.PC = this._pop();
+            this.flags.interruptsEnabled = true;
+        };
+        const JEQ = () => {
+            if (this.getFlag(E_FLAG)) {
+                this.reg.PC = this.reg[operandA];
+                advancePC = false;
+            } 
+        };
+    
+        const JMP = () => {
+            this.reg.PC = this.reg[operandA];
+            advancePC = false;
+        };
+        const JNE = () => {
+            if (!this.getFlag(E_FLAG)) {
+                this.reg.PC = this.reg[operandA];
+                advancePC = false;
+            }
+        };
+        const LD = () => {
+            this.reg[operandA] = this.ram.read(this.reg[operandB]);
+        };
+        const MUL = (operandA, operandB) => {
+            this.alu('MUL', operandA, operandB);
+        };
+        const LDI = (operandA, operandB) => {
+            this.reg[operandA] = operandB;
+        };
+        const NOP = () => {
+            this.alu('INC', 'PC');
+        };
+        const POP = () => {
+            this.reg[operandA] = this.ram.read(this.reg[SP]);
+            this.reg[SP]++;
+        };
+        const _pop = () => {
+            const val = this.ram.read(this.reg[SP]);
+            this.alu('INC', SP);
+            return val;
+        };
+        const PRA = () => {
+            const reg = this.ram.read(this.reg.PC + 1);
+            fs.writeSync(process.stdout.fd, String.fromCharCode(this.reg[reg]));
+        };
+        const PRN = (operandA) => {
+            console.log(this.reg[operandA]);
+        };
+        const PUSH = () => {
+            this.reg[SP]--;
+            this.ram.write(this.reg[SP], this.reg[operandA]);
+        };
+        const _push = (val) => {
+            this.alu('DEC', SP);
+            this.ram.write(this.reg[SP], val);
+        };
+        const RET = () => {
+            this.reg.PC = this._pop();
+        };
+        const STR = () => {
+            this.ram.write(this.reg[operandA], this.reg[operandB]);
+        };
+        const SUB = () => {
+            this.alu('SUB', operandA, operandB);
+        };
+
+        const ERROR = (IR) => {
+            console.log('Unknown instruction: ' + IR.toString(2));
+            this.stopClock();
+        };
+
         const branchTable = {
             [ADD]  : ADD,
             [CALL] : CALL,
@@ -193,110 +318,7 @@ class CPU {
         if (Object.keys(branchTable).includes(IR.toString())) {
             branchTable[IR](operandA, operandB);
         } else {
-            handleDefault(IR);
-        };
-
-        const ADD = (operandA, operandB) => {
-            this.alu('ADD', oprandA, operandB);
-        };
-        const CALL = () => {
-            this._push(operandB);
-            this.reg.PC = this.reg[operandA]
-        };
-        const CMP = () => {
-            this.alu('CMP', operandA, operandB);
-        };
-        const DEC = () => {
-            this.alu('DEC', operandA);
-            this.alu('ADD', 'PC', null, 2);
-        };
-        const DIV = () => {
-            this.alu('DIV', operandA, operandB);
-            this.alu('ADD', 'PC', null, 3);
-        };
-        const HLT = () => {
-            this.stopClock();
-        };
-        const INC = () => {
-            this.alu('INC', operandA);
-        };
-        const INT = () => {
-            const intNum = this.reg[operandA];
-            this.reg[IM] |= intNum;
-        };
-        const IRET = () => {
-            for (let r=7; r >= 0; r--) {
-                this.reg[r] = this._pop();
-            }
-            this.reg.PC = this._pop();
-            this.flags.interruptsEnabled = true;
-        };
-        const JEQ = () => {
-            if (this.flags.equal) {
-                this.reg.PC = this.reg[operandA];
-            } else {
-                this.alu('ADD', 'PC', null, 2);
-            }
-        };
-    
-        const JMP = () => {
-            this.reg.PC = this.reg[operandA];
-        };
-        const JNE = () => {
-            if (!this.flags.equal) {
-                this.reg.PC = this.reg[operandA];
-            } else {
-                this.alu('ADD', 'PC', null, 2);
-            }
-        };
-        const LD = () => {
-            this.reg[operandA] = this.ram.read(this.reg[operandB]);
-            this.alu('ADD', 'PC', null, 3);
-        };
-        const MUL = (operandA, operandB) => {
-            this.reg[operandA] = this.alu('MUL', operandA, operandB);
-        };
-        const LDI = (operandA, operandB) => {
-            this.reg[operandA] = operandB;
-        };
-        const NOP = () => {
-            this.alu('INC', 'PC');
-        };
-        const _pop = () => {
-            const val = this.ram.read(this.reg[SP]);
-            this.alu('INC', SP);
-            return val;
-        };
-        const POP = () => {
-            this.reg[operandA] = this.ram.read(this.reg[SP]);
-            this.reg[SP]++;
-        };
-        const PRA = () => {
-            const reg = this.ram.read(this.reg.PC + 1);
-            fs.writeSync(process.stdout.fd, String.fromCharCode(this.reg[reg]));
-            this.alu('ADD', 'PC', null, 2);
-        };
-        const PRN = (operandA) => {
-            console.log(this.reg[operandA]);
-        };
-        const PUSH = () => {
-            this.reg[SP]--;
-            this.ram.write(this.reg[SP], this.reg[operandA]);
-        };
-        const _push = (val) => {
-            this.alu('DEC', SP);
-            this.ram.write(this.reg[SP], val);
-        };
-        const RET = () => {
-            this.reg.PC = this._pop();
-        };
-        const STR = () => {
-            this.ram.write(this.reg[operandA], this.reg[operandB]);
-            this.alu('ADD', 'PC', null, 3);
-        };
-        const SUB = () => {
-            this.alu('SUB', operandA, operandB);
-            this.alu('ADD', 'PC', null, 3);
+            ERROR(IR);
         };
 
         // Increment the PC register to go to the next instruction. Instructions
